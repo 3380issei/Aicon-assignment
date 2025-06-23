@@ -13,6 +13,7 @@ type ItemUsecase interface {
 	GetItemByID(ctx context.Context, id int64) (*entity.Item, error)
 	CreateItem(ctx context.Context, input CreateItemInput) (*entity.Item, error)
 	DeleteItem(ctx context.Context, id int64) error
+	UpdateItem(ctx context.Context, id int64, input UpdateItemInput) (*entity.Item, error)
 	GetCategorySummary(ctx context.Context) (*CategorySummary, error)
 }
 
@@ -22,6 +23,12 @@ type CreateItemInput struct {
 	Brand         string `json:"brand"`
 	PurchasePrice int    `json:"purchase_price"`
 	PurchaseDate  string `json:"purchase_date"`
+}
+
+type UpdateItemInput struct {
+	Name          string `json:"name"`
+	Brand         string `json:"brand"`
+	PurchasePrice int    `json:"purchase_price"`
 }
 
 type CategorySummary struct {
@@ -104,6 +111,58 @@ func (u *itemUsecase) DeleteItem(ctx context.Context, id int64) error {
 	}
 
 	return nil
+}
+
+func (u *itemUsecase) UpdateItem(ctx context.Context, id int64, input UpdateItemInput) (*entity.Item, error) {
+	if id <= 0 {
+		return nil, domainErrors.ErrInvalidInput
+	}
+
+	item, err := u.itemRepo.FindByID(ctx, id)
+	if err != nil {
+		if domainErrors.IsNotFoundError(err) {
+			return nil, domainErrors.ErrItemNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve item: %w", err)
+	}
+
+	// 入力が空の場合は、既存の値を使用
+	var updateName string
+	var updateBrand string
+	var updatePurchasePrice int
+
+	if input.Name != "" {
+		updateName = input.Name
+	} else {
+		updateName = item.Name
+	}
+
+	if input.Brand != "" {
+		updateBrand = input.Brand
+	} else {
+		updateBrand = item.Brand
+	}
+
+	if input.PurchasePrice != 0 {
+		updatePurchasePrice = input.PurchasePrice
+	} else {
+		updatePurchasePrice = item.PurchasePrice
+	}
+
+	item.Update(
+		updateName,
+		item.Category,
+		updateBrand,
+		updatePurchasePrice,
+		item.PurchaseDate,
+	)
+
+	updatedItem, err := u.itemRepo.Update(ctx, id, item)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update item: %w", err)
+	}
+
+	return updatedItem, nil
 }
 
 func (u *itemUsecase) GetCategorySummary(ctx context.Context) (*CategorySummary, error) {
